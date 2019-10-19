@@ -6,14 +6,19 @@ import Paper from "@material-ui/core/Paper";
 import TextField from "@material-ui/core/TextField";
 import Button from "@material-ui/core/Button";
 import IconButton from "@material-ui/core/IconButton";
-import MenuIcon from "@material-ui/icons/Menu";
-import Drawer from "@material-ui/core/Drawer";
+import List from "@material-ui/core/List";
+import ListItem from "@material-ui/core/ListItem";
+import ListItemIcon from "@material-ui/core/ListItemIcon";
+import ListItemSecondaryAction from "@material-ui/core/ListItemSecondaryAction";
+import ListItemText from "@material-ui/core/ListItemText";
+import Checkbox from "@material-ui/core/Checkbox";
+import DeleteIcon from "@material-ui/icons/Delete";
 import { Link } from "react-router-dom";
-import { auth } from "./firebase";
+import { auth, db } from "./firebase";
 
 export function SignIn(props) {
-  const { email, setEmail } = useState("");
-  const { password, setPassword } = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(u => {
@@ -55,6 +60,7 @@ export function SignIn(props) {
           />
           <TextField
             value={password}
+            type={"password"}
             onChange={e => {
               setPassword(e.target.value);
             }}
@@ -84,8 +90,8 @@ export function SignIn(props) {
 }
 
 export function SignUp(props) {
-  const { email, setEmail } = useState("");
-  const { password, setPassword } = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(u => {
@@ -157,8 +163,35 @@ export function SignUp(props) {
 }
 
 export function App(props) {
-  const [drawer_open, setDrawerOpen] = useState(false);
   const [user, setUser] = useState(null);
+  const [tasks, setTask] = useState([]);
+  const [new_task, setNewTask] = useState([]);
+
+  const handleAddTask = () => {
+    db.collection("users")
+      .doc(user.uid)
+      .collection("tasks")
+      .add({ text: new_task, checked: false })
+      .then(() => {
+        setNewTask("");
+      });
+  };
+
+  const handleDeleteTask = task_id => {
+    db.collection("users")
+      .doc(user.uid)
+      .collection("tasks")
+      .doc(task_id)
+      .delete();
+  };
+
+  const handleCheckTask = (checked, task_id) => {
+    db.collection("users")
+      .doc(user.uid)
+      .collection("tasks")
+      .doc(task_id)
+      .update({ checked: checked });
+  };
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(u => {
@@ -171,6 +204,30 @@ export function App(props) {
 
     return unsubscribe;
   }, [props.history]);
+
+  useEffect(() => {
+    let unsubscribe;
+    if (user) {
+      unsubscribe = db
+        .collection("users")
+        .doc(user.uid)
+        .collection("tasks")
+        .onSnapshot(snapshot => {
+          const updated_tasks = [];
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            updated_tasks.push({
+              text: data.text,
+              checked: data.checked,
+              id: doc.id
+            });
+          });
+          setTask(updated_tasks);
+        });
+    }
+
+    return unsubscribe;
+  }, [user]);
 
   const handleSignOut = () => {
     auth
@@ -189,40 +246,80 @@ export function App(props) {
 
   return (
     <div>
-      <AppBar position="static">
+      <AppBar position="static" color="primary">
         <Toolbar>
-          <IconButton
-            edge="start"
-            color="inherit"
-            onClick={() => {
-              setDrawerOpen(true);
-            }}
-          >
-            <MenuIcon />
-          </IconButton>
           <Typography
             color="inherit"
             variant="h6"
             style={{ marginLeft: 15, flexGrow: 1 }}
           >
-            News
+            To Do List
           </Typography>
           <Typography color="inherit" style={{ marginRight: 30 }}>
-            Hi {user.email}!
+            Hi {user.email}
           </Typography>
-          <Button onClick={handleSignOut} type={"password"} color="inherit">
+          <Button color="inherit" onClick={handleSignOut}>
             Sign Out
           </Button>
         </Toolbar>
       </AppBar>
-      <Drawer
-        open={drawer_open}
-        onClose={() => {
-          setDrawerOpen(false);
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center"
         }}
       >
-        I'm a drawer
-      </Drawer>
+        <Paper
+          style={{
+            maxWidth: "500px",
+            width: "100%",
+            marginTop: 30,
+            padding: "40px"
+          }}
+        >
+          <Typography variant={"h6"}> To Do List </Typography>
+          <div style={{ display: "flex", marginTop: "40px" }}>
+            <TextField
+              fullWidth
+              placeholder="Write Task Here"
+              style={{ marginRight: "30px" }}
+              value={new_task}
+              onChange={e => {
+                setNewTask(e.target.value);
+              }}
+            />
+            <Button onClick={handleAddTask} color="primary" variant="contained">
+              {" "}
+              Add{" "}
+            </Button>
+          </div>
+          <List>
+            {tasks.map(value => (
+              <ListItem key={value.id}>
+                <ListItemIcon>
+                  <Checkbox
+                    checked={value.checked}
+                    onChange={(e, checked) => {
+                      handleCheckTask(checked, value.id);
+                    }}
+                  />
+                </ListItemIcon>
+                <ListItemText primary={value.text} />
+                <ListItemSecondaryAction>
+                  <IconButton
+                    onClick={() => {
+                      handleDeleteTask(value.id);
+                    }}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </ListItemSecondaryAction>
+              </ListItem>
+            ))}
+          </List>
+        </Paper>
+      </div>
     </div>
   );
 }
